@@ -1111,7 +1111,7 @@ function dip_downloadReport() {
     <strong>Name:</strong> Abhishek Kumar &nbsp;|&nbsp;
     <strong>Roll No:</strong> 2505371 &nbsp;|&nbsp;
     <strong>Course:</strong> Digital Image Processing &nbsp;|&nbsp;
-   
+   Project Url :<link>https://cssimulation.netlify.app/</link>
   </div>
 
   <h2>1. Objective</h2>

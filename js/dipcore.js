@@ -26,7 +26,120 @@ class ColorQuantizer {
   }
 }
 
+class MedianCutQuantizer {
+  constructor(numColors) {
+    this.numColors = numColors;
+  }
 
+  buildPalette(imageData) {
+    const pixels = [];
+    const d = imageData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      pixels.push([d[i], d[i+1], d[i+2]]);
+    }
+
+    let buckets = [pixels];
+
+    while (buckets.length < this.numColors) {
+      let maxRange = -1;
+      let splitIdx = 0;
+
+      for (let b = 0; b < buckets.length; b++) {
+        const bucket = buckets[b];
+        let minR=255,maxR=0,minG=255,maxG=0,minB=255,maxB=0;
+        for (const p of bucket) {
+          if (p[0]<minR) minR=p[0]; if (p[0]>maxR) maxR=p[0];
+          if (p[1]<minG) minG=p[1]; if (p[1]>maxG) maxG=p[1];
+          if (p[2]<minB) minB=p[2]; if (p[2]>maxB) maxB=p[2];
+        }
+        const range = Math.max(maxR-minR, maxG-minG, maxB-minB);
+        if (range > maxRange) { maxRange = range; splitIdx = b; }
+      }
+
+      const bucket = buckets[splitIdx];
+      const rR=Math.max(...bucket.map(p=>p[0]))-Math.min(...bucket.map(p=>p[0]));
+      const rG=Math.max(...bucket.map(p=>p[1]))-Math.min(...bucket.map(p=>p[1]));
+      const rB=Math.max(...bucket.map(p=>p[2]))-Math.min(...bucket.map(p=>p[2]));
+      const ch = rR>=rG && rR>=rB ? 0 : rG>=rB ? 1 : 2;
+
+      bucket.sort((a,b) => a[ch]-b[ch]);
+      const mid = Math.floor(bucket.length / 2);
+      buckets.splice(splitIdx, 1, bucket.slice(0, mid), bucket.slice(mid));
+    }
+
+    return buckets.map(bucket => {
+      let r=0,g=0,b=0;
+      for (const p of bucket) { r+=p[0]; g+=p[1]; b+=p[2]; }
+      const n = bucket.length;
+      return [Math.round(r/n), Math.round(g/n), Math.round(b/n)];
+    });
+  }
+
+  nearestColor(palette, r, g, b) {
+    let best = 0, bestDist = Infinity;
+    for (let i = 0; i < palette.length; i++) {
+      const dr=r-palette[i][0], dg=g-palette[i][1], db=b-palette[i][2];
+      const dist = dr*dr + dg*dg + db*db;
+      if (dist < bestDist) { bestDist=dist; best=i; }
+    }
+    return palette[best];
+  }
+
+  quantize(imageData) {
+    const palette = this.buildPalette(imageData);
+    const src = imageData.data;
+    const out = new Uint8ClampedArray(src.length);
+    for (let i = 0; i < src.length; i += 4) {
+      const c = this.nearestColor(palette, src[i], src[i+1], src[i+2]);
+      out[i]=c[0]; out[i+1]=c[1]; out[i+2]=c[2]; out[i+3]=src[i+3];
+    }
+    return new ImageData(out, imageData.width, imageData.height);
+  }
+}
+
+class MedianCutFS {
+  constructor(mcq) { this.mcq = mcq; }
+
+  dither(imageData) {
+    const palette = this.mcq.buildPalette(imageData);
+    const W = imageData.width, H = imageData.height;
+    const buf = new Float32Array(imageData.data);
+
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y*W+x)*4;
+        const r=Math.max(0,Math.min(255,buf[i]));
+        const g=Math.max(0,Math.min(255,buf[i+1]));
+        const b=Math.max(0,Math.min(255,buf[i+2]));
+        const c = this.mcq.nearestColor(palette, r, g, b);
+        buf[i]=c[0]; buf[i+1]=c[1]; buf[i+2]=c[2];
+        const er=r-c[0], eg=g-c[1], eb=b-c[2];
+        this._sp(buf,W,H,x+1,y,  er,eg,eb,7/16);
+        this._sp(buf,W,H,x-1,y+1,er,eg,eb,3/16);
+        this._sp(buf,W,H,x,  y+1,er,eg,eb,5/16);
+        this._sp(buf,W,H,x+1,y+1,er,eg,eb,1/16);
+      }
+    }
+
+    const out = new Uint8ClampedArray(imageData.data.length);
+    for (let i=0;i<out.length;i+=4) {
+      out[i]=Math.max(0,Math.min(255,buf[i]));
+      out[i+1]=Math.max(0,Math.min(255,buf[i+1]));
+      out[i+2]=Math.max(0,Math.min(255,buf[i+2]));
+      out[i+3]=imageData.data[i+3];
+    }
+    return new ImageData(out, W, H);
+  }
+
+  _sp(buf,W,H,x,y,er,eg,eb,f) {
+    if (x<0||x>=W||y<0||y>=H) return;
+    const i=(y*W+x)*4;
+    buf[i]+=er*f; buf[i+1]+=eg*f; buf[i+2]+=eb*f;
+  }
+}
+
+window.MedianCutQuantizer = MedianCutQuantizer;
+window.MedianCutFS = MedianCutFS;
 class FloydSteinberg {
   constructor(quantizer) {
     this.quantizer = quantizer;
