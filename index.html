@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Learning Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════
+       HERO / SUBJECT SELECTION SCREEN
+  ════════════════════════════════════ -->
+  <div id="home-screen" class="screen active">
+
+    <header class="hero">
+      <div class="hero-bg"></div>
+      <div class="hero-content">
+        <div class="badge">Interactive Learning Lab</div>
+        <h1><br><span class="accent">Simulator</span></h1>
+        <p class="hero-sub">
+          Depth-first learning for BSc / MSc students.<br>
+          Every algorithm — visualised, step-by-step, with real math.
+        </p>
+      </div>
+    </header>
+
+    <!-- Subject Cards -->
+    <main class="subjects-grid">
+
+      <!-- NEURAL NETWORKS -->
+      <div class="subject-card" data-subject="nn" tabindex="0" role="button">
+        <div class="card-icon"></div>
+        <h2>Neural Networks</h2>
+        <p>From a single neuron to deep networks.<br>See every weight, every gradient.</p>
+        <ul class="topic-pills">
+          <li>Perceptron</li>
+          <li>MLP</li>
+          <li>Backpropagation</li>
+          <li>Activation Fns</li>
+        </ul>
+        <div class="card-arrow">→</div>
+      </div>
+      
+<div class="subject-card" data-subject="dip" tabindex="0" role="button">
+  <div class="card-icon"></div>
+  <h2>Digital Image Processing</h2>
+  <p>From pixels to perception.<br>Visualise filters, compression, and dithering live.</p>
+  <ul class="topic-pills">
+    <li>Quantization</li>
+    <li>Dithering</li>
+    <li>DCT / JPEG</li>
+    <li>Edge Detection</li>
+    <li>Histogram</li>
+    <li>Spatial Filters</li>
+  </ul>
+  <div class="card-arrow">→</div>
+</div>
+      
+
+    </main>
+    
+  </div>
+
+  
+  <div id="nn-screen" class="screen">
+    <nav class="top-nav">
+      <button class="back-btn" data-goto="home">← Back</button>
+      <h2>Neural Networks</h2>
+      <div class="nav-tabs">
+        <button class="nav-tab active" data-tab="perceptron">Perceptron</button>
+        <button class="nav-tab" data-tab="mlp">MLP + Backprop</button>
+      </div>
+    </nav>
+
+    <!-- Perceptron Tab -->
+    <div id="tab-perceptron" class="tab-panel active"></div>
+
+    <!-- MLP Tab -->
+    <div id="tab-mlp" class="tab-panel"></div>
+     
+  </div>
+
+
+
+  <div id="ec-screen" class="screen">
+    <nav class="top-nav">
+      <button class="back-btn" data-goto="home">← Back</button>
+      <h2> Evolutionary Computation</h2>
+      <div class="nav-tabs">
+        <button class="nav-tab active" data-tab="ga">Genetic Algorithm</button>
+      </div>
+    </nav>
+
+    <div id="tab-ga" class="tab-panel active"></div>
+  </div>
+ 
+<div id="dip-screen" class="screen">
+  <nav class="top-nav">
+    <button class="back-btn" data-goto="home">← Back</button>
+    <h2>Digital Image Processing</h2>
+
+    <div class="nav-tabs">
+      <button class="nav-tab active" data-tab="dip">DIP Lab</button>
+    </div>
+  </nav>
+
+  <!-- DIP TAB -->
+  <div id="tab-dip" class="tab-panel active"></div>
+</div>
+  <!-- Global tooltip -->
+  <div id="tooltip" class="tooltip hidden">
+    
+  </div>
+
+  <!-- Scripts — load order matters! -->
+  <script src="js/utils.js"></script>
+  <script src="js/nn-core.js"></script>
+  <script src="js/ga-core.js"></script>
+  <script src="js/perceptron-ui.js"></script>
+  <script src="js/mlp-ui.js"></script>
+  <script src="js/ga-ui.js"></script>
+  <script src="js/router.js"></script>
+ <script src="js/dip-ui.js"></script>
+ <script src="js/dipcore.js"></script>
+</body>
+</html>

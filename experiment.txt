@@ -1,0 +1,7 @@
+Take input image as your colored passport size photograph as considered in
+Assignment 2. Generate results for diHerent values of colors as power of 2 such
+as 64, 16, 4. Show diHerence images from the original input image.
+2. Show diHerence images from the original input image for each result as above
+and provide your observations.
+3. Use Floyed Steinberg algorithm to add dithering and repeat 1 and 2 as above.
+4. You should submit a report with results and the code.
