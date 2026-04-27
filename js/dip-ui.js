@@ -1538,7 +1538,7 @@ function medianCutPalette(pixels, numColors) {
   </ul>
 </div>
 
-
+<script>window.onload=()=>setTimeout(()=>window.print(),600);<\/script>
 </body></html>`;
 
   const win = window.open('', '_blank');
