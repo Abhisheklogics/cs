@@ -521,7 +521,7 @@ function dip_setSpeed(speed, btn) {
   document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   const descs = {
-    slow:   ' Slow: 500ms delay — each color group renders one by one. Best for learning.',
+    slow:   ' Slow: 100ms delay — each color group renders one by one. Best for learning.',
     normal: ' Normal: 30ms delay — balanced, smooth UI updates.',
     fast:   ' Fast: no delay — all groups process instantly.'
   };
