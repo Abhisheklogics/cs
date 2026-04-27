@@ -523,7 +523,7 @@ function dip_setSpeed(speed, btn) {
   const descs = {
     slow:   ' Slow: 3000ms delay — each color group renders one by one. Best for learning.',
     normal: ' Normal: 600ms delay — balanced, smooth UI updates.',
-    fast:   ' Fast: 400 no delay — all groups process instantly.'
+    fast:   ' Fast: 400ms no delay — all groups process instantly.'
   };
   document.getElementById('dip-speed-desc').textContent = descs[speed];
 }
