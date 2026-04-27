@@ -1448,7 +1448,7 @@ function dip_downloadMCReport() {
 <div class="meta">
   <strong>Name:</strong> Abhishek Kumar &nbsp;|&nbsp;
   <strong>Roll No:</strong> 2505371 &nbsp;|&nbsp;
-  <strong>Course:</strong> Digital Image Processing &nbsp;|&nbsp;
+  <strong>Subject:</strong> Digital Image Processing &nbsp;|&nbsp;
   <strong>Project link:</strong> <a href="https://cssimulation.netlify.app/">cssimulation.netlify.app</a>
   
 </div>
