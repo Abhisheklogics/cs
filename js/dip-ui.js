@@ -529,7 +529,7 @@ function dip_setSpeed(speed, btn) {
 }
 
 function dip_delay() {
-  const ms = { slow: 3000, normal: 600, fast: 400 }[dip_processingSpeed] || 30;
+  const ms = { slow: 1000, normal: 600, fast: 400 }[dip_processingSpeed] || 30;
   return ms === 0 ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
 }
 
