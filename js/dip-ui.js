@@ -521,7 +521,7 @@ function dip_setSpeed(speed, btn) {
   document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   const descs = {
-    slow:   ' Slow: 100ms delay — each color group renders one by one. Best for learning.',
+    slow:   ' Slow: 300ms delay — each color group renders one by one. Best for learning.',
     normal: ' Normal: 30ms delay — balanced, smooth UI updates.',
     fast:   ' Fast: no delay — all groups process instantly.'
   };
@@ -529,7 +529,7 @@ function dip_setSpeed(speed, btn) {
 }
 
 function dip_delay() {
-  const ms = { slow: 500, normal: 30, fast: 0 }[dip_processingSpeed] || 30;
+  const ms = { slow: 3000, normal: 600, fast: 400 }[dip_processingSpeed] || 30;
   return ms === 0 ? Promise.resolve() : new Promise(r => setTimeout(r, ms));
 }
 
