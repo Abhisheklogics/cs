@@ -2,6 +2,7 @@ let dip_origImageData = null;
 let dip_imgW = 0;
 let dip_imgH = 0;
 let dip_lastResults = [];
+let dip_processingSpeed = 'normal'; // 'slow' | 'normal' | 'fast'
 
 function buildDipTab() {
   const container = document.getElementById('tab-dip');
@@ -24,6 +25,7 @@ function buildDipTab() {
 
         <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:14px">
           <button class="nav-tab active" onclick="dip_switchTab('quantization',this)">Quantization</button>
+          <button class="nav-tab" onclick="dip_switchTab('mediancut',this)">Median Cut</button>
           <button class="nav-tab" onclick="dip_switchTab('filters',this)">Filters</button>
           <button class="nav-tab" onclick="dip_switchTab('dct',this)">DCT / JPEG</button>
           <button class="nav-tab" onclick="dip_switchTab('histogram',this)">Histogram</button>
@@ -44,10 +46,32 @@ function buildDipTab() {
           <button class="btn btn-ghost" id="dip-reset-btn" style="flex:1">Reset</button>
         </div>
 
+        <!-- ── SPEED CONTROL ── -->
+        <div class="form-group" style="background:rgba(255,184,48,0.06);border:1px solid rgba(255,184,48,0.2);
+             border-radius:8px;padding:10px 12px;margin-bottom:14px">
+          <label style="color:var(--amber);font-size:.72rem;font-weight:700;
+                        text-transform:uppercase;letter-spacing:.06em"> Processing Speed</label>
+          <div style="display:flex;gap:6px;margin-top:8px">
+            <button class="btn btn-ghost speed-btn active" data-speed="slow"
+                    onclick="dip_setSpeed('slow',this)"
+                    style="flex:1;font-size:.72rem;padding:5px 4px"> Slow</button>
+            <button class="btn btn-ghost speed-btn" data-speed="normal"
+                    onclick="dip_setSpeed('normal',this)"
+                    style="flex:1;font-size:.72rem;padding:5px 4px"> Normal</button>
+            <button class="btn btn-ghost speed-btn" data-speed="fast"
+                    onclick="dip_setSpeed('fast',this)"
+                    style="flex:1;font-size:.72rem;padding:5px 4px"> Fast</button>
+          </div>
+          <p id="dip-speed-desc" style="font-size:.68rem;color:var(--text3);margin-top:6px;line-height:1.5">
+            Slow: step-by-step with delay — good for learning. Each color level processes one at a time.
+          </p>
+        </div>
+
+        <!-- ── QUANTIZATION PANEL ── -->
         <div id="dip-panel-quantization">
           <h3 style="margin-top:4px">Color Quantization</h3>
           <div style="font-size:.78rem;color:var(--text2);line-height:1.7;margin-bottom:10px">
-            Reduces 16.7 million possible colors down to a small set. 
+            Reduces 16.7 million possible colors down to a small set.
             Each channel (R, G, B) is snapped to the nearest allowed level.
           </div>
 
@@ -116,6 +140,91 @@ function buildDipTab() {
           </div>
         </div>
 
+        <!-- ── MEDIAN CUT PANEL ── -->
+        <div id="dip-panel-mediancut" style="display:none">
+          <h3 style="margin-top:4px">Median Cut Quantization</h3>
+          <div style="font-size:.78rem;color:var(--text2);line-height:1.7;margin-bottom:10px">
+            Smarter than uniform quantization — splits the color space along the widest color
+            range repeatedly until the desired palette size is reached. Each bucket's average
+            becomes a palette color. Pixels are then mapped to the nearest palette entry.
+          </div>
+
+          <div class="form-group">
+            <label>Number of palette colors</label>
+            <div class="slider-row">
+              <input type="range" id="mc-colors" min="2" max="64" step="2" value="16">
+              <span class="slider-val" id="mc-colors-val">16</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Diff amplification ×</label>
+            <div class="slider-row">
+              <input type="range" id="mc-gain" min="1" max="5" step=".5" value="2">
+              <span class="slider-val" id="mc-gain-val">2</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Compare with (shown side-by-side)</label>
+            <select id="mc-compare">
+              <option value="none">No comparison</option>
+              <option value="uniform">Uniform Quantization (same count)</option>
+              <option value="fs">Floyd-Steinberg Dithered (same count)</option>
+            </select>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn btn-primary" id="mc-run-btn" disabled>▶ Run Median Cut</button>
+          </div>
+
+          <!-- Median Cut Algorithm Steps Visualizer -->
+          <div style="background:var(--bg2);border-radius:8px;padding:12px;margin-top:10px">
+            <div style="font-family:var(--font-mono);font-size:.7rem;color:var(--purple);
+                        font-weight:700;margin-bottom:8px">Algorithm Steps</div>
+            <div style="font-size:.74rem;color:var(--text2);line-height:1.9">
+              <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px">
+                <span style="background:var(--purple);color:#fff;border-radius:50%;width:18px;height:18px;
+                             display:flex;align-items:center;justify-content:center;font-size:.6rem;
+                             flex-shrink:0;margin-top:1px">1</span>
+                <span>Put all pixels into one bucket</span>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px">
+                <span style="background:var(--purple);color:#fff;border-radius:50%;width:18px;height:18px;
+                             display:flex;align-items:center;justify-content:center;font-size:.6rem;
+                             flex-shrink:0;margin-top:1px">2</span>
+                <span>Find which channel (R/G/B) has the widest range in the largest bucket</span>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px">
+                <span style="background:var(--purple);color:#fff;border-radius:50%;width:18px;height:18px;
+                             display:flex;align-items:center;justify-content:center;font-size:.6rem;
+                             flex-shrink:0;margin-top:1px">3</span>
+                <span>Sort by that channel and split at the median</span>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px">
+                <span style="background:var(--purple);color:#fff;border-radius:50%;width:18px;height:18px;
+                             display:flex;align-items:center;justify-content:center;font-size:.6rem;
+                             flex-shrink:0;margin-top:1px">4</span>
+                <span>Repeat until bucket count = desired palette size</span>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:8px">
+                <span style="background:var(--purple);color:#fff;border-radius:50%;width:18px;height:18px;
+                             display:flex;align-items:center;justify-content:center;font-size:.6rem;
+                             flex-shrink:0;margin-top:1px">5</span>
+                <span>Each bucket's average RGB → palette entry. Map every pixel to nearest entry</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px">
+            <button class="btn btn-secondary" id="mc-report-btn"
+                    onclick="dip_downloadMCReport()" style="display:none;width:100%">
+              ↓ Download Median Cut Report
+            </button>
+          </div>
+        </div>
+
+        <!-- ── FILTERS PANEL ── -->
         <div id="dip-panel-filters" style="display:none">
           <h3 style="margin-top:4px">Spatial Filters</h3>
           <div style="font-size:.78rem;color:var(--text2);line-height:1.7;margin-bottom:10px">
@@ -165,6 +274,7 @@ function buildDipTab() {
                border-left:3px solid var(--purple)"></div>
         </div>
 
+        <!-- ── DCT PANEL ── -->
         <div id="dip-panel-dct" style="display:none">
           <h3 style="margin-top:4px">DCT / JPEG Compression</h3>
           <div style="font-size:.78rem;color:var(--text2);line-height:1.7;margin-bottom:10px">
@@ -192,6 +302,7 @@ function buildDipTab() {
           </div>
         </div>
 
+        <!-- ── HISTOGRAM PANEL ── -->
         <div id="dip-panel-histogram" style="display:none">
           <h3 style="margin-top:4px">Histogram Analysis</h3>
           <div style="font-size:.78rem;color:var(--text2);line-height:1.7;margin-bottom:10px">
@@ -208,6 +319,8 @@ function buildDipTab() {
               <option value="fs64">vs FS Dithered 64</option>
               <option value="fs16">vs FS Dithered 16</option>
               <option value="fs4">vs FS Dithered 4</option>
+              <option value="mc16">vs Median Cut 16 colors</option>
+              <option value="mc8">vs Median Cut 8 colors</option>
             </select>
           </div>
           <div class="btn-row">
@@ -224,6 +337,7 @@ function buildDipTab() {
 
       </div>
 
+      <!-- ── VIZ AREA ── -->
       <div class="viz-area" id="dip-viz">
 
         <div id="dip-quant-wrap">
@@ -273,6 +387,45 @@ function buildDipTab() {
           <div class="canvas-card" id="dip-obs-card" style="display:none">
             <h4>Observations</h4>
             <div id="dip-obs-content"></div>
+          </div>
+        </div>
+
+        <!-- ── MEDIAN CUT VIZ ── -->
+        <div id="dip-mediancut-wrap" style="display:none">
+          <div class="canvas-card">
+            <h4>Median Cut Results</h4>
+            <div id="mc-hint" style="padding:30px;text-align:center;color:var(--text3);
+                 font-family:var(--font-mono);font-size:.8rem">
+              Upload an image and press ▶ Run Median Cut
+            </div>
+            <div id="mc-results-grid"></div>
+          </div>
+          <div class="canvas-card" id="mc-palette-card" style="display:none">
+            <h4>Extracted Palette</h4>
+            <div id="mc-palette-swatches" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+            <p style="font-size:.7rem;color:var(--text3);margin-top:8px;font-family:var(--font-mono)">
+              Each swatch = one bucket's average color from the median-cut tree
+            </p>
+          </div>
+          <div class="canvas-card" id="mc-metrics-card" style="display:none">
+            <h4>Quality Metrics Comparison</h4>
+            <div id="mc-metrics-grid"></div>
+          </div>
+          <div class="canvas-card">
+            <h4>Median Cut vs Uniform Quantization</h4>
+            <div style="font-size:.82rem;color:var(--text2);line-height:1.9">
+              <p><strong style="color:var(--purple)">Uniform Quantization</strong> divides the color space into
+              equal-sized cells, regardless of where the actual colors are. Works well for evenly distributed
+              images, but wastes palette slots on color regions that have no pixels.</p>
+              <p><strong style="color:var(--cyan)">Median Cut</strong> only allocates palette colors where the
+              actual image colors are. A photo of a forest uses most slots for greens; a portrait uses them
+              for skin tones. Result: better perceptual quality at the same palette size.</p>
+              <div style="font-family:var(--font-mono);font-size:.74rem;color:var(--green);
+                          background:rgba(0,229,160,.05);border:1px solid rgba(0,229,160,.15);
+                          border-radius:8px;padding:10px;margin-top:10px">
+                Median Cut is the algorithm behind early GIF encoders and many PNG-8 converters
+              </div>
+            </div>
           </div>
         </div>
 
@@ -338,6 +491,7 @@ function buildDipTab() {
               <p><strong style="color:var(--text)">Original image:</strong> spread smoothly across many values.</p>
               <p><strong style="color:var(--amber)">Quantized image:</strong> sharp vertical spikes at only a few allowed values — everything else is zero.</p>
               <p><strong style="color:var(--purple)">FS Dithered image:</strong> looks smooth again — error diffusion redistributes pixels across many values, even though the palette is still small.</p>
+              <p><strong style="color:var(--cyan)">Median Cut image:</strong> spikes appear at palette colors chosen based on actual image content — different from uniform quantization.</p>
               <p style="margin-top:8px"><strong style="color:var(--cyan)">Histogram Equalization</strong> spreads the histogram evenly across 0–255, improving contrast in dark or washed-out images.</p>
             </div>
           </div>
@@ -351,25 +505,61 @@ function buildDipTab() {
 }
 
 
+/* ─────────────────────────────────────────────
+   SPEED CONTROL
+───────────────────────────────────────────── */
+function dip_setSpeed(speed, btn) {
+  dip_processingSpeed = speed;
+  document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const descs = {
+    slow:   'Slow: step-by-step with delay — good for learning. Each color level processes one at a time.',
+    normal: 'Normal: balanced speed. Small delay between steps keeps UI responsive.',
+    fast:   'Fast: no delay — processes all levels immediately. Best for large images.'
+  };
+  document.getElementById('dip-speed-desc').textContent = descs[speed];
+}
+
+function dip_delay() {
+  const ms = { slow: 400, normal: 20, fast: 0 };
+  const d = ms[dip_processingSpeed] || 20;
+  if (d === 0) return Promise.resolve();
+  return new Promise(r => setTimeout(r, d));
+}
+
+
+/* ─────────────────────────────────────────────
+   TAB SWITCHING
+───────────────────────────────────────────── */
 function dip_switchTab(name, btn) {
-  ['quantization', 'filters', 'dct', 'histogram'].forEach(t => {
+  ['quantization', 'mediancut', 'filters', 'dct', 'histogram'].forEach(t => {
     document.getElementById('dip-panel-' + t).style.display = (t === name) ? '' : 'none';
   });
-  document.getElementById('dip-quant-wrap').style.display   = name === 'quantization' ? '' : 'none';
-  document.getElementById('dip-filter-wrap').style.display  = name === 'filters' ? '' : 'none';
-  document.getElementById('dip-dct-wrap').style.display     = name === 'dct' ? '' : 'none';
-  document.getElementById('dip-hist-wrap').style.display    = name === 'histogram' ? '' : 'none';
+  document.getElementById('dip-quant-wrap').style.display      = name === 'quantization' ? '' : 'none';
+  document.getElementById('dip-mediancut-wrap').style.display  = name === 'mediancut'    ? '' : 'none';
+  document.getElementById('dip-filter-wrap').style.display     = name === 'filters'      ? '' : 'none';
+  document.getElementById('dip-dct-wrap').style.display        = name === 'dct'          ? '' : 'none';
+  document.getElementById('dip-hist-wrap').style.display       = name === 'histogram'    ? '' : 'none';
   document.querySelectorAll('#tab-dip .nav-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 }
 
 
+/* ─────────────────────────────────────────────
+   EVENT WIRING
+───────────────────────────────────────────── */
 function dip_attachEvents() {
   document.getElementById('dip-size').addEventListener('input', e => {
     document.getElementById('dip-size-val').textContent = e.target.value;
   });
   document.getElementById('dip-gain').addEventListener('input', e => {
     document.getElementById('dip-gain-val').textContent = e.target.value;
+  });
+  document.getElementById('mc-colors').addEventListener('input', e => {
+    document.getElementById('mc-colors-val').textContent = e.target.value;
+  });
+  document.getElementById('mc-gain').addEventListener('input', e => {
+    document.getElementById('mc-gain-val').textContent = e.target.value;
   });
   document.getElementById('dct-quality').addEventListener('input', e => {
     document.getElementById('dct-quality-val').textContent = e.target.value;
@@ -397,6 +587,7 @@ function dip_attachEvents() {
   document.getElementById('dip-file-inp').addEventListener('change', dip_loadImageFile);
   document.getElementById('dip-demo-btn').addEventListener('click',  dip_loadDemoImage);
   document.getElementById('dip-run-btn').addEventListener('click',   dip_runQuantization);
+  document.getElementById('mc-run-btn').addEventListener('click',    dip_runMedianCut);
   document.getElementById('dip-reset-btn').addEventListener('click', dip_reset);
   document.getElementById('filter-run-btn').addEventListener('click', dip_applyFilter);
   document.getElementById('filter-all-btn').addEventListener('click', dip_applyAllFilters);
@@ -417,6 +608,9 @@ function dip_attachEvents() {
 }
 
 
+/* ─────────────────────────────────────────────
+   IMAGE LOADING
+───────────────────────────────────────────── */
 function dip_filterInfo(type) {
   const infos = {
     grayscale: 'Converts color to luminance using ITU-R weights: Y = 0.299R + 0.587G + 0.114B. Green contributes most because the human eye is most sensitive to it.',
@@ -432,7 +626,6 @@ function dip_filterInfo(type) {
   };
   return infos[type] || '';
 }
-
 
 function dip_loadImageFile(e) {
   const file = e.target.files[0];
@@ -515,13 +708,16 @@ function dip_setImage(canvas) {
   zone.onclick = () => document.getElementById('dip-file-inp').click();
   document.getElementById('dip-file-inp').addEventListener('change', dip_loadImageFile);
 
-  ['dip-run-btn', 'filter-run-btn', 'filter-all-btn', 'dct-run-btn', 'hist-draw-btn'].forEach(id => {
+  ['dip-run-btn','mc-run-btn','filter-run-btn','filter-all-btn','dct-run-btn','hist-draw-btn'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.disabled = false;
   });
 }
 
 
+/* ─────────────────────────────────────────────
+   UNIFORM QUANTIZATION + FLOYD-STEINBERG
+───────────────────────────────────────────── */
 async function dip_runQuantization() {
   if (!dip_origImageData) { dip_log('Load an image first.', 'log-error'); return; }
 
@@ -531,7 +727,7 @@ async function dip_runQuantization() {
 
   if (!checked.length) { dip_log('Select at least one color level.', 'log-error'); return; }
 
-  dip_clearLog('Running quantization...');
+  dip_clearLog('Running quantization [speed: ' + dip_processingSpeed + ']...');
   dip_log('Image: ' + dip_imgW + '×' + dip_imgH + ' | Testing: ' + checked.join(', ') + ' colors', 'log-concept');
 
   document.getElementById('dip-main-hint').style.display = 'none';
@@ -549,7 +745,7 @@ async function dip_runQuantization() {
   dip_lastResults = [];
 
   for (const nc of checked) {
-    await new Promise(r => setTimeout(r, 0));
+    await dip_delay();
     dip_log('Processing ' + nc + ' colors...', 'log-concept');
 
     const q      = new ColorQuantizer(nc);
@@ -560,7 +756,7 @@ async function dip_runQuantization() {
     const ssim   = ImageMetrics.ssim(dip_origImageData, qData);
     dip_log('Plain  MSE=' + mse.toFixed(2) + ' PSNR=' + psnr.toFixed(1) + 'dB SSIM=' + ssim.toFixed(4), 'log-result');
 
-    await new Promise(r => setTimeout(r, 0));
+    await dip_delay();
     const fs     = new FloydSteinberg(q);
     const fsData = fs.dither(dip_origImageData);
     const fsDiff = DiffImage.compute(dip_origImageData, fsData, gain);
@@ -594,6 +790,158 @@ async function dip_runQuantization() {
 }
 
 
+/* ─────────────────────────────────────────────
+   MEDIAN CUT
+───────────────────────────────────────────── */
+let dip_lastMCResult = null;
+
+async function dip_runMedianCut() {
+  if (!dip_origImageData) { dip_log('Load an image first.', 'log-error'); return; }
+
+  const nc       = parseInt(document.getElementById('mc-colors').value);
+  const gain     = parseFloat(document.getElementById('mc-gain').value);
+  const compare  = document.getElementById('mc-compare').value;
+
+  dip_clearLog('Running Median Cut [' + nc + ' colors, speed: ' + dip_processingSpeed + ']...');
+  dip_log('Extracting pixels and building color buckets...', 'log-concept');
+
+  document.getElementById('mc-hint').style.display = 'none';
+  document.getElementById('mc-results-grid').innerHTML = '';
+  document.getElementById('mc-palette-card').style.display = 'none';
+  document.getElementById('mc-metrics-card').style.display = 'none';
+
+  await dip_delay();
+
+  const mcQ     = new MedianCutQuantizer(nc);
+  const mcData  = mcQ.quantize(dip_origImageData);
+  const mcDiff  = DiffImage.compute(dip_origImageData, mcData, gain);
+  const mseMC   = ImageMetrics.mse(dip_origImageData, mcData);
+  const psnrMC  = ImageMetrics.psnr(mseMC);
+  const ssimMC  = ImageMetrics.ssim(dip_origImageData, mcData);
+
+  dip_log('Median Cut  MSE=' + mseMC.toFixed(2) + ' PSNR=' + psnrMC.toFixed(1) + 'dB SSIM=' + ssimMC.toFixed(4), 'log-result');
+
+  dip_lastMCResult = { nc, mcData, mcDiff, mseMC, psnrMC, ssimMC };
+
+  const grid = document.getElementById('mc-results-grid');
+
+  // Row 1: original + median cut + diff
+  const sec1 = dip_makeSection('Median Cut — ' + nc + ' colors', 'Content-aware palette selection');
+  const row1 = dip_makeRow();
+  row1.appendChild(dip_makeCell('Original', dip_origImageData, 'Baseline'));
+  row1.appendChild(dip_makeCell('Median Cut (' + nc + ')', mcData,
+    'MSE ' + mseMC.toFixed(1) + ' | PSNR ' + psnrMC.toFixed(1) + 'dB | ' + ImageMetrics.grade(psnrMC)));
+  row1.appendChild(dip_makeCell('Diff — MC', mcDiff, 'Bright = error region'));
+  sec1.appendChild(row1);
+  grid.appendChild(sec1);
+
+  // Optional comparison
+  if (compare !== 'none') {
+    await dip_delay();
+
+    let compData, compDiff, compMSE, compPSNR, compSSIM, compLabel;
+
+    if (compare === 'uniform') {
+      const uQ    = new ColorQuantizer(nc);
+      compData    = uQ.quantize(dip_origImageData);
+      compLabel   = 'Uniform (' + nc + ')';
+      dip_log('Comparing with Uniform Quantization...', 'log-concept');
+    } else {
+      const uQ    = new ColorQuantizer(nc);
+      const fs    = new FloydSteinberg(uQ);
+      compData    = fs.dither(dip_origImageData);
+      compLabel   = 'FS Dithered (' + nc + ')';
+      dip_log('Comparing with Floyd-Steinberg...', 'log-concept');
+    }
+
+    compDiff  = DiffImage.compute(dip_origImageData, compData, gain);
+    compMSE   = ImageMetrics.mse(dip_origImageData, compData);
+    compPSNR  = ImageMetrics.psnr(compMSE);
+    compSSIM  = ImageMetrics.ssim(dip_origImageData, compData);
+
+    dip_log('Compare    MSE=' + compMSE.toFixed(2) + ' PSNR=' + compPSNR.toFixed(1) + 'dB', 'log-result');
+
+    const sec2 = dip_makeSection('Comparison — ' + compLabel, 'Same palette size, different algorithm');
+    const row2 = dip_makeRow();
+    row2.appendChild(dip_makeCell(compLabel, compData,
+      'MSE ' + compMSE.toFixed(1) + ' | PSNR ' + compPSNR.toFixed(1) + 'dB | ' + ImageMetrics.grade(compPSNR)));
+    row2.appendChild(dip_makeCell('Diff — Comp', compDiff, 'Bright = error region'));
+    sec2.appendChild(row2);
+    grid.appendChild(sec2);
+
+    // Metrics side-by-side
+    document.getElementById('mc-metrics-card').style.display = '';
+    document.getElementById('mc-metrics-grid').innerHTML = `
+      <table class="data-table" style="font-size:.76rem">
+        <thead>
+          <tr><th>Method</th><th>Colors</th><th>MSE ↓</th><th>PSNR ↑</th><th>SSIM ↑</th><th>Grade</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="color:var(--purple);font-weight:700">Median Cut</td>
+            <td style="font-family:var(--font-mono)">${nc}</td>
+            <td style="font-family:var(--font-mono)">${mseMC.toFixed(2)}</td>
+            <td style="font-family:var(--font-mono)">${psnrMC.toFixed(2)}</td>
+            <td style="font-family:var(--font-mono)">${ssimMC.toFixed(4)}</td>
+            <td>${ImageMetrics.grade(psnrMC)}</td>
+          </tr>
+          <tr>
+            <td style="color:var(--amber)">${compLabel}</td>
+            <td style="font-family:var(--font-mono)">${nc}</td>
+            <td style="font-family:var(--font-mono)">${compMSE.toFixed(2)}</td>
+            <td style="font-family:var(--font-mono)">${compPSNR.toFixed(2)}</td>
+            <td style="font-family:var(--font-mono)">${compSSIM.toFixed(4)}</td>
+            <td>${ImageMetrics.grade(compPSNR)}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="font-size:.7rem;color:var(--text3);margin-top:8px;font-family:var(--font-mono)">
+        ${psnrMC > compPSNR
+          ? ' Median Cut gives better PSNR — content-aware palette beats uniform splitting'
+          : ' ' + compLabel + ' has higher PSNR — dithering redistributes error perceptually'}
+      </p>
+    `;
+  }
+
+  // Palette swatches — extract from median cut result
+  dip_renderMCPalette(mcData, nc);
+
+  document.getElementById('mc-report-btn').style.display = '';
+  dip_log('Done.', 'log-note');
+}
+
+function dip_renderMCPalette(imageData, nc) {
+  // Sample unique colors from result to approximate palette
+  const seen = new Map();
+  const d = imageData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const key = (d[i] << 16) | (d[i+1] << 8) | d[i+2];
+    if (!seen.has(key)) seen.set(key, { r: d[i], g: d[i+1], b: d[i+2], count: 0 });
+    seen.get(key).count++;
+  }
+  const sorted = [...seen.values()].sort((a, b) => b.count - a.count).slice(0, nc);
+
+  document.getElementById('mc-palette-card').style.display = '';
+  const wrap = document.getElementById('mc-palette-swatches');
+  wrap.innerHTML = '';
+  sorted.forEach(({ r, g, b, count }) => {
+    const swatch = document.createElement('div');
+    const hex = '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+    const luma = 0.299*r + 0.587*g + 0.114*b;
+    swatch.title = hex + ' (' + count + ' px)';
+    swatch.style.cssText = `width:36px;height:36px;border-radius:6px;background:${hex};
+      border:1px solid var(--border);cursor:default;position:relative;
+      display:flex;align-items:flex-end;justify-content:center`;
+    swatch.innerHTML = `<span style="font-size:.52rem;font-family:var(--font-mono);
+      color:${luma>128?'#000':'#fff'};padding:2px;line-height:1">${hex}</span>`;
+    wrap.appendChild(swatch);
+  });
+}
+
+
+/* ─────────────────────────────────────────────
+   FILTERS
+───────────────────────────────────────────── */
 function dip_applyFilter() {
   if (!dip_origImageData) { dip_log('Load an image first.', 'log-error'); return; }
 
@@ -677,6 +1025,9 @@ function dip_applyAllFilters() {
 }
 
 
+/* ─────────────────────────────────────────────
+   DCT
+───────────────────────────────────────────── */
 function dip_runDCT() {
   if (!dip_origImageData) { dip_log('Load an image first.', 'log-error'); return; }
   document.getElementById('dip-dct-wrap').style.display = '';
@@ -781,6 +1132,9 @@ function dip_showQuantMatrix(quality) {
 }
 
 
+/* ─────────────────────────────────────────────
+   HISTOGRAM
+───────────────────────────────────────────── */
 function dip_drawHistogram() {
   if (!dip_origImageData) { dip_log('Load an image first.', 'log-error'); return; }
   document.getElementById('dip-hist-wrap').style.display = '';
@@ -789,13 +1143,18 @@ function dip_drawHistogram() {
   let compData = dip_origImageData;
 
   if (mode !== 'orig') {
-    const parts = mode.match(/^(quant|fs)(\d+)$/);
-    if (parts) {
-      const nc = parseInt(parts[2]);
-      const q = new ColorQuantizer(nc);
-      compData = parts[1] === 'quant'
-        ? q.quantize(dip_origImageData)
-        : new FloydSteinberg(q).dither(dip_origImageData);
+    if (mode === 'mc16' || mode === 'mc8') {
+      const nc = mode === 'mc16' ? 16 : 8;
+      compData = new MedianCutQuantizer(nc).quantize(dip_origImageData);
+    } else {
+      const parts = mode.match(/^(quant|fs)(\d+)$/);
+      if (parts) {
+        const nc = parseInt(parts[2]);
+        const q = new ColorQuantizer(nc);
+        compData = parts[1] === 'quant'
+          ? q.quantize(dip_origImageData)
+          : new FloydSteinberg(q).dither(dip_origImageData);
+      }
     }
   }
 
@@ -860,6 +1219,9 @@ function dip_drawHistogram() {
 }
 
 
+/* ─────────────────────────────────────────────
+   DOM HELPERS
+───────────────────────────────────────────── */
 function dip_makeSection(title, subtitle) {
   const s = document.createElement('div');
   s.style.marginBottom = '20px';
@@ -918,6 +1280,9 @@ function dip_zoom(srcCanvas, title) {
 }
 
 
+/* ─────────────────────────────────────────────
+   METRICS & OBSERVATIONS
+───────────────────────────────────────────── */
 function dip_renderMetrics(results) {
   document.getElementById('dip-metrics-card').style.display = '';
   let html = `
@@ -956,7 +1321,6 @@ function dip_renderMetrics(results) {
     </p>`;
   document.getElementById('dip-metrics-grid').innerHTML = html;
 }
-
 
 function dip_renderObservations(results) {
   document.getElementById('dip-obs-card').style.display = '';
@@ -1002,6 +1366,9 @@ function dip_renderObservations(results) {
 }
 
 
+/* ─────────────────────────────────────────────
+   REPORT DOWNLOAD — UNIFORM + FS + MEDIAN CUT
+───────────────────────────────────────────── */
 function dip_downloadReport() {
   if (!dip_lastResults.length) { dip_log('Run quantization first.', 'log-error'); return; }
 
@@ -1016,6 +1383,7 @@ function dip_downloadReport() {
   origCanvas.width = dip_imgW; origCanvas.height = dip_imgH;
   origCanvas.getContext('2d').putImageData(dip_origImageData, 0, 0);
 
+  // ── Uniform + FS results ──
   let imagesHTML = '';
   dip_lastResults.forEach(s => {
     imagesHTML += `
@@ -1051,6 +1419,60 @@ function dip_downloadReport() {
     `;
   });
 
+  // ── Median Cut section in report ──
+  let mcSection = '';
+  if (dip_lastMCResult) {
+    const mc = dip_lastMCResult;
+    mcSection = `
+      <h2>5. Median Cut Quantization Results</h2>
+      <p>
+        Median Cut was run with <strong>${mc.nc} palette colors</strong>.
+        Unlike uniform quantization, Median Cut adapts the palette to the actual color distribution
+        of the image — concentrating palette slots where the most pixels are.
+      </p>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0">
+        <div style="text-align:center">
+          <img src="${buildURL(dip_origImageData)}" style="width:100%;image-rendering:pixelated;border:1px solid #ddd">
+          <p style="font-size:11px;margin-top:4px;color:#555">Original</p>
+        </div>
+        <div style="text-align:center">
+          <img src="${buildURL(mc.mcData)}" style="width:100%;image-rendering:pixelated;border:1px solid #ddd">
+          <p style="font-size:11px;margin-top:4px;color:#555">Median Cut (${mc.nc} colors)<br>
+            MSE ${mc.mseMC.toFixed(2)} | PSNR ${mc.psnrMC.toFixed(2)} dB | ${ImageMetrics.grade(mc.psnrMC)}</p>
+        </div>
+        <div style="text-align:center">
+          <img src="${buildURL(mc.mcDiff)}" style="width:100%;image-rendering:pixelated;border:1px solid #ddd">
+          <p style="font-size:11px;margin-top:4px;color:#555">Difference Image<br>SSIM ${mc.ssimMC.toFixed(4)}</p>
+        </div>
+      </div>
+      <div style="background:#f0f0ff;border-left:4px solid #5a4aaa;padding:10px 14px;font-size:13px;border-radius:0 4px 4px 0;margin-bottom:16px">
+        Median Cut PSNR = ${mc.psnrMC.toFixed(2)} dB, SSIM = ${mc.ssimMC.toFixed(4)}.
+        The palette is built by recursively halving the color space along its widest dimension,
+        allocating more palette entries to dominant hues in the image.
+      </div>
+
+      <h3>5.1 Median Cut Algorithm — Code Summary</h3>
+      <pre>// Step 1: extract all pixels into one bucket
+buckets = [all_pixels]
+
+// Step 2-4: split until we have numColors buckets
+while buckets.length &lt; numColors:
+  largest = buckets.sort_by_size().shift()
+  channel = find_widest_range(largest)  // R, G, or B
+  sorted  = largest.sort_by(channel)
+  mid     = sorted.length / 2
+  buckets.push(sorted[:mid], sorted[mid:])
+
+// Step 5: each bucket's average = palette entry
+palette = buckets.map(b => average_color(b))
+
+// Step 6: map every pixel to nearest palette entry
+for each pixel:
+  output[pixel] = nearest(palette, pixel)  // min Euclidean distance</pre>
+    `;
+  }
+
+  // ── Metrics table ──
   let metricsRows = '';
   dip_lastResults.forEach(s => {
     metricsRows += `
@@ -1071,6 +1493,19 @@ function dip_downloadReport() {
       </tr>
     `;
   });
+  if (dip_lastMCResult) {
+    const mc = dip_lastMCResult;
+    metricsRows += `
+      <tr style="background:#f0f0ff">
+        <td style="font-weight:bold">${mc.nc}</td>
+        <td>Median Cut</td>
+        <td style="font-family:monospace">${mc.mseMC.toFixed(2)}</td>
+        <td style="font-family:monospace">${mc.psnrMC.toFixed(2)}</td>
+        <td style="font-family:monospace">${mc.ssimMC.toFixed(4)}</td>
+        <td>${ImageMetrics.grade(mc.psnrMC)}</td>
+      </tr>
+    `;
+  }
 
   const today = new Date().toLocaleDateString('en-IN', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
@@ -1111,14 +1546,15 @@ function dip_downloadReport() {
     <strong>Name:</strong> Abhishek Kumar &nbsp;|&nbsp;
     <strong>Roll No:</strong> 2505371 &nbsp;|&nbsp;
     <strong>Course:</strong> Digital Image Processing &nbsp;|&nbsp;
-   Project Url :<link>https://cssimulation.netlify.app/</link>
+   
+    Project URL: <a href="https://cssimulation.netlify.app/">cssimulation.netlify.app</a>
   </div>
 
   <h2>1. Objective</h2>
   <p>
-    To study the effect of color quantization on image quality, implement Floyd-Steinberg error
-    diffusion dithering, and compare the two methods using standard image quality metrics — MSE,
-    PSNR, and SSIM.
+    To study and compare three color quantization techniques — Uniform Quantization,
+    Floyd-Steinberg Error Diffusion Dithering, and Median Cut Quantization — using standard
+    image quality metrics: MSE, PSNR, and SSIM.
   </p>
 
   <h2>2. Input Image</h2>
@@ -1131,7 +1567,7 @@ function dip_downloadReport() {
 
   <h2>3. Theory</h2>
 
-  <h3>3.1 Color Quantization</h3>
+  <h3>3.1 Uniform Color Quantization</h3>
   <p>
     Color quantization reduces the number of distinct colors in an image. Each RGB channel
     (0–255) is snapped to the nearest of a small set of allowed values. For K total colors,
@@ -1144,10 +1580,6 @@ quantized = round(pixel / step) × step
 Example — 4 colors (2 levels), step = 85:
   R = 120  →  round(120/85) = 1  →  1 × 85 = 85
   Error discarded = 120 - 85 = 35</pre>
-  <p>
-    Discarding this error causes visible <em>banding</em> (posterization) in smooth areas
-    like skin tones and sky gradients.
-  </p>
 
   <h3>3.2 Floyd-Steinberg Error Diffusion Dithering</h3>
   <p>
@@ -1162,12 +1594,23 @@ right_pixel     += error × 7/16
 bottom-left     += error × 3/16
 below           += error × 5/16
 bottom-right    += error × 1/16</pre>
-  <p>
-    The fractions add to 16/16 = 1, so no error is lost. The human eye spatially averages
-    nearby pixels, perceiving a smoother gradient even though the palette is the same size.
-  </p>
 
-  <h3>3.3 Quality Metrics</h3>
+  <h3>3.3 Median Cut Quantization</h3>
+  <p>
+    Median Cut builds a content-aware palette by recursively dividing the color space.
+    It always splits the bucket with the most pixels along the channel with the widest range.
+    After enough splits, each bucket's average becomes a palette color.
+  </p>
+  <pre>Algorithm:
+  1. Put all pixels in one bucket
+  2. Find the largest bucket
+  3. Find channel with widest value range in that bucket
+  4. Sort pixels by that channel; split at median
+  5. Repeat until bucket count = desired palette size
+  6. palette[i] = average(bucket[i])
+  7. Map each pixel to its nearest palette entry (Euclidean distance)</pre>
+
+  <h3>3.4 Quality Metrics</h3>
   <pre>MSE  = (1/N) × Σ (original - quantized)²
 PSNR = 10 × log₁₀(255² / MSE)  [dB]
 SSIM = structural similarity index  [0 to 1]
@@ -1178,10 +1621,12 @@ PSNR interpretation:
   30–35 dB →  Acceptable
   < 30 dB  →  Visible degradation</pre>
 
-  <h2>4. Results</h2>
+  <h2>4. Uniform Quantization + Floyd-Steinberg Results</h2>
   ${imagesHTML}
 
-  <h2>5. Metrics Summary</h2>
+  ${mcSection}
+
+  <h2>6. Metrics Summary (All Methods)</h2>
   <table>
     <thead>
       <tr>
@@ -1191,106 +1636,61 @@ PSNR interpretation:
     <tbody>${metricsRows}</tbody>
   </table>
 
-  <h2>6. Observations</h2>
+  <h2>7. Observations</h2>
   <ul>
     ${dip_lastResults.map(s => `
       <li style="margin-bottom:10px">
-        <strong>${s.nc} colors:</strong>
+        <strong>${s.nc} colors (Uniform):</strong>
         Plain PSNR = ${s.psnr.toFixed(2)} dB, FS PSNR = ${s.psnrFS.toFixed(2)} dB.
         As the number of colors decreases, MSE increases and PSNR decreases.
         The difference image shows maximum error at edges and smooth gradient zones.
         Floyd-Steinberg distributes error to neighbors, producing a perceptually smoother result.
       </li>
     `).join('')}
+    ${dip_lastMCResult ? `
+    <li style="margin-bottom:10px">
+      <strong>${dip_lastMCResult.nc} colors (Median Cut):</strong>
+      PSNR = ${dip_lastMCResult.psnrMC.toFixed(2)} dB, SSIM = ${dip_lastMCResult.ssimMC.toFixed(4)}.
+      Content-aware palette allocation reduces error in dominant color regions of the image.
+    </li>` : ''}
   </ul>
 
-  <h2>7. Source Code (dip-core.js)</h2>
-  <pre>
-class ColorQuantizer {
-  constructor(numColors) {
-    this.levelsPerCh = Math.max(2, Math.round(Math.cbrt(numColors)));
-    this.step = 255 / (this.levelsPerCh - 1);
-  }
-  quantizeCh(v) {
-    return Math.min(255, Math.round(Math.round(v / this.step) * this.step));
-  }
-  quantize(imageData) {
-    const src = imageData.data;
-    const out = new Uint8ClampedArray(src.length);
-    for (let i = 0; i &lt; src.length; i += 4) {
-      out[i]   = this.quantizeCh(src[i]);
-      out[i+1] = this.quantizeCh(src[i+1]);
-      out[i+2] = this.quantizeCh(src[i+2]);
-      out[i+3] = src[i+3];
+  <h2>8. Source Code Summary</h2>
+  <pre>// Median Cut — key logic
+class MedianCutQuantizer {
+  _medianCut(pixels, numColors) {
+    let buckets = [pixels];
+    while (buckets.length &lt; numColors) {
+      buckets.sort((a, b) => b.length - a.length);
+      const largest = buckets.shift();
+      const [b1, b2] = this._splitBucket(largest);
+      buckets.push(b1, b2);
     }
-    return new ImageData(out, imageData.width, imageData.height);
+    return buckets.map(b => this._average(b));  // palette
   }
-}
 
-class FloydSteinberg {
-  constructor(quantizer) { this.quantizer = quantizer; }
-  dither(imageData) {
-    const W = imageData.width, H = imageData.height;
-    const buf = new Float32Array(imageData.data);
-    for (let y = 0; y &lt; H; y++) {
-      for (let x = 0; x &lt; W; x++) {
-        const idx = (y * W + x) * 4;
-        const r = Math.max(0, Math.min(255, buf[idx]));
-        const g = Math.max(0, Math.min(255, buf[idx+1]));
-        const b = Math.max(0, Math.min(255, buf[idx+2]));
-        const qr = this.quantizer.quantizeCh(r);
-        const qg = this.quantizer.quantizeCh(g);
-        const qb = this.quantizer.quantizeCh(b);
-        buf[idx] = qr; buf[idx+1] = qg; buf[idx+2] = qb;
-        const er = r-qr, eg = g-qg, eb = b-qb;
-        this._spread(buf,W,H, x+1,y,   er,eg,eb, 7/16);
-        this._spread(buf,W,H, x-1,y+1, er,eg,eb, 3/16);
-        this._spread(buf,W,H, x,  y+1, er,eg,eb, 5/16);
-        this._spread(buf,W,H, x+1,y+1, er,eg,eb, 1/16);
-      }
-    }
-    const out = new Uint8ClampedArray(imageData.data.length);
-    for (let i = 0; i &lt; out.length; i += 4) {
-      out[i]   = Math.max(0, Math.min(255, buf[i]));
-      out[i+1] = Math.max(0, Math.min(255, buf[i+1]));
-      out[i+2] = Math.max(0, Math.min(255, buf[i+2]));
-      out[i+3] = imageData.data[i+3];
-    }
-    return new ImageData(out, W, H);
+  _splitBucket(pixels) {
+    // find channel with widest range
+    const ranges = [0,1,2].map(ch => {
+      const vals = pixels.map(p => p[ch]);
+      return Math.max(...vals) - Math.min(...vals);
+    });
+    const ch = ranges.indexOf(Math.max(...ranges));
+    pixels.sort((a, b) => a[ch] - b[ch]);
+    const mid = Math.floor(pixels.length / 2);
+    return [pixels.slice(0, mid), pixels.slice(mid)];
   }
-  _spread(buf,W,H,x,y,er,eg,eb,f) {
-    if (x&lt;0||x>=W||y&lt;0||y>=H) return;
-    const i=(y*W+x)*4;
-    buf[i]+=er*f; buf[i+1]+=eg*f; buf[i+2]+=eb*f;
-  }
-}
-
-class ImageMetrics {
-  static mse(a, b) {
-    let sum=0, count=0;
-    for (let i=0; i&lt;a.data.length; i+=4) {
-      sum += (a.data[i]-b.data[i])**2;
-      sum += (a.data[i+1]-b.data[i+1])**2;
-      sum += (a.data[i+2]-b.data[i+2])**2;
-      count += 3;
-    }
-    return sum/count;
-  }
-  static psnr(mse) {
-    if (mse===0) return Infinity;
-    return 10*Math.log10(255*255/mse);
-  }
-}
-  </pre>
+}</pre>
 
   <div class="findings">
     <h2 style="margin-top:0;color:#1a5c1a">Key Findings</h2>
     <ul>
       <li>More colors consistently give lower MSE and higher PSNR</li>
       <li>Floyd-Steinberg dithering improves perceptual quality at all color levels</li>
+      <li>Median Cut allocates palette colors where the image's actual colors are — more efficient than uniform splitting</li>
       <li>SSIM is a better perceptual metric than MSE/PSNR alone</li>
-      <li>Difference images are brightest at object edges, confirming that quantization error concentrates at boundaries</li>
-      <li>This principle is the foundation of JPEG, GIF, PNG-8, and all palette-based compression</li>
+      <li>Difference images are brightest at object edges, confirming quantization error concentrates at boundaries</li>
+      <li>Uniform + FS + Median Cut together form the foundation of GIF, PNG-8, and JPEG palette compression</li>
     </ul>
   </div>
 
@@ -1313,11 +1713,21 @@ class ImageMetrics {
   }
 }
 
+// Separate Median Cut only report
+function dip_downloadMCReport() {
+  if (!dip_lastMCResult) { dip_log('Run Median Cut first.', 'log-error'); return; }
+  dip_downloadReport();  // Shares the combined report which includes MC section
+}
 
+
+/* ─────────────────────────────────────────────
+   RESET
+───────────────────────────────────────────── */
 function dip_reset() {
-  dip_origImageData = null; dip_imgW = 0; dip_imgH = 0; dip_lastResults = [];
+  dip_origImageData = null; dip_imgW = 0; dip_imgH = 0;
+  dip_lastResults = []; dip_lastMCResult = null;
 
-  ['dip-run-btn', 'filter-run-btn', 'filter-all-btn', 'dct-run-btn', 'hist-draw-btn'].forEach(id => {
+  ['dip-run-btn','mc-run-btn','filter-run-btn','filter-all-btn','dct-run-btn','hist-draw-btn'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.disabled = true;
   });
@@ -1339,13 +1749,17 @@ function dip_reset() {
   document.getElementById('dip-obs-card').style.display = 'none';
   document.getElementById('dip-theory-cards').style.display = 'none';
   document.getElementById('dip-report-btn').style.display = 'none';
+  document.getElementById('mc-hint').style.display = '';
+  document.getElementById('mc-results-grid').innerHTML = '';
+  document.getElementById('mc-palette-card').style.display = 'none';
+  document.getElementById('mc-metrics-card').style.display = 'none';
+  document.getElementById('mc-report-btn').style.display = 'none';
   document.getElementById('dip-filter-hint').style.display = '';
   document.getElementById('dip-filter-grid').innerHTML = '';
   document.getElementById('dip-filter-theory').style.display = 'none';
 
   dip_clearLog('Reset.');
 }
-
 
 function dip_clearLog(title) {
   const log = document.getElementById('dip-log');
@@ -1362,6 +1776,5 @@ function dip_log(msg, cls) {
   log.appendChild(d);
   log.scrollTop = log.scrollHeight;
 }
-
 
 window.buildDipTab = buildDipTab;
