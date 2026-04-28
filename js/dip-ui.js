@@ -1506,7 +1506,8 @@ ${resultsHTML}
 </ul>
 
 <h2>7. Source Code</h2>
-<pre>/class MedianCutQuantizer {
+<pre>
+class MedianCutQuantizer {
   constructor(numColors) {
     this.numColors   = numColors;
     this.lastPalette = null;   // stored after quantize() for display
