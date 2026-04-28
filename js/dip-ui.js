@@ -1506,26 +1506,150 @@ ${resultsHTML}
 </ul>
 
 <h2>7. Source Code</h2>
-<pre>// Median Cut — core split logic
-function medianCutPalette(pixels, numColors) {
-  let buckets = [pixels];
-  while (buckets.length &lt; numColors) {
-    buckets.sort((a,b) => b.length - a.length);      // largest first
-    const largest = buckets.shift();
-    const ranges = [0,1,2].map(ch => {               // find widest channel
-      const v = largest.map(p => p[ch]);
-      return Math.max(...v) - Math.min(...v);
-    });
-    const ch = ranges.indexOf(Math.max(...ranges));
-    largest.sort((a,b) => a[ch] - b[ch]);            // sort by that channel
-    const mid = Math.floor(largest.length / 2);
-    buckets.push(largest.slice(0,mid), largest.slice(mid));
+<pre>/class MedianCutQuantizer {
+  constructor(numColors) {
+    this.numColors   = numColors;
+    this.lastPalette = null;   // stored after quantize() for display
   }
-  return buckets.map(b => {                           // average = palette
-    const s=[0,0,0]; b.forEach(p=>{s[0]+=p[0];s[1]+=p[1];s[2]+=p[2];});
-    return s.map(v => Math.round(v/b.length));
-  });
-}</pre>
+
+ 
+  quantize(imageData) {
+    const pixels = this._extractPixels(imageData);
+    this.lastPalette = this._medianCut(pixels, this.numColors);
+    return this._applyPalette(imageData, this.lastPalette);
+  }
+
+  /* Convert flat ImageData → [[r,g,b], ...] */
+  _extractPixels(imageData) {
+    const d = imageData.data, pixels = [];
+    for (let i = 0; i < d.length; i += 4)
+      pixels.push([d[i], d[i + 1], d[i + 2]]);
+    return pixels;
+  }
+
+  /* Core recursive-split algorithm */
+  _medianCut(pixels, numColors) {
+    let buckets = [pixels];
+
+    while (buckets.length < numColors) {
+      // Always split the largest bucket first
+      buckets.sort((a, b) => b.length - a.length);
+      const largest = buckets.shift();
+      if (largest.length < 2) { buckets.push(largest); break; }
+      const [b1, b2] = this._splitBucket(largest);
+      buckets.push(b1, b2);
+    }
+
+    return buckets.map(bucket => this._average(bucket));
+  }
+
+  /* Find widest channel, sort, split at median */
+  _splitBucket(pixels) {
+    // Calculate range for each channel
+    const ranges = [0, 1, 2].map(ch => {
+      const vals = pixels.map(p => p[ch]);
+      return Math.max(...vals) - Math.min(...vals);
+    });
+    const ch = ranges.indexOf(Math.max(...ranges)); // widest channel
+
+    pixels.sort((a, b) => a[ch] - b[ch]);           // sort by that channel
+    const mid = Math.floor(pixels.length / 2);       // median index
+    return [pixels.slice(0, mid), pixels.slice(mid)];
+  }
+
+  /* Average RGB of a bucket */
+  _average(pixels) {
+    const sum = [0, 0, 0];
+    pixels.forEach(p => { sum[0] += p[0]; sum[1] += p[1]; sum[2] += p[2]; });
+    return sum.map(v => Math.round(v / pixels.length));
+  }
+
+  /* Nearest palette color by Euclidean distance in RGB space */
+  _nearest(pixel, palette) {
+    let best = 0, bestDist = Infinity;
+    palette.forEach(([pr, pg, pb], i) => {
+      const d = (pixel[0]-pr)**2 + (pixel[1]-pg)**2 + (pixel[2]-pb)**2;
+      if (d < bestDist) { bestDist = d; best = i; }
+    });
+    return palette[best];
+  }
+
+  _applyPalette(imageData, palette) {
+    const src = imageData.data;
+    const out = new Uint8ClampedArray(src.length);
+    for (let i = 0; i < src.length; i += 4) {
+      const [r, g, b] = this._nearest([src[i], src[i+1], src[i+2]], palette);
+      out[i] = r; out[i+1] = g; out[i+2] = b; out[i+3] = src[i+3];
+    }
+    return new ImageData(out, imageData.width, imageData.height);
+  }
+}
+
+
+
+class FloydSteinberg {
+  constructor(quantizer) {
+    this.quantizer = quantizer;
+  }
+
+  dither(imageData) {
+    const W = imageData.width, H = imageData.height;
+    // Float32 so accumulated errors don't lose precision
+    const buf = new Float32Array(imageData.data);
+
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const idx = (y * W + x) * 4;
+
+       
+        const r = Math.max(0, Math.min(255, buf[idx]));
+        const g = Math.max(0, Math.min(255, buf[idx + 1]));
+        const b = Math.max(0, Math.min(255, buf[idx + 2]));
+
+     
+        let qr, qg, qb;
+        if (this.quantizer instanceof MedianCutQuantizer) {
+          // For MC: use its palette (already built)
+          if (this.quantizer.lastPalette) {
+            [qr, qg, qb] = this.quantizer._nearest([r, g, b], this.quantizer.lastPalette);
+          } else {
+            qr = r; qg = g; qb = b;
+          }
+        } else {
+          qr = this.quantizer.quantizeCh(r);
+          qg = this.quantizer.quantizeCh(g);
+          qb = this.quantizer.quantizeCh(b);
+        }
+
+        buf[idx] = qr; buf[idx+1] = qg; buf[idx+2] = qb;
+
+       
+        const er = r - qr, eg = g - qg, eb = b - qb;
+        this._spread(buf, W, H, x+1, y,   er, eg, eb, 7/16);
+        this._spread(buf, W, H, x-1, y+1, er, eg, eb, 3/16);
+        this._spread(buf, W, H, x,   y+1, er, eg, eb, 5/16);
+        this._spread(buf, W, H, x+1, y+1, er, eg, eb, 1/16);
+      }
+    }
+
+
+    const out = new Uint8ClampedArray(imageData.data.length);
+    for (let i = 0; i < out.length; i += 4) {
+      out[i]   = Math.max(0, Math.min(255, buf[i]));
+      out[i+1] = Math.max(0, Math.min(255, buf[i+1]));
+      out[i+2] = Math.max(0, Math.min(255, buf[i+2]));
+      out[i+3] = imageData.data[i+3];
+    }
+    return new ImageData(out, W, H);
+  }
+
+  _spread(buf, W, H, x, y, er, eg, eb, f) {
+    if (x < 0 || x >= W || y < 0 || y >= H) return;
+    const i = (y * W + x) * 4;
+    buf[i] += er * f; buf[i+1] += eg * f; buf[i+2] += eb * f;
+  }
+}
+  </pre>
 
 <div class="findings">
   <h2 style="margin-top:0;color:#2a6a2a">Key Findings</h2>
